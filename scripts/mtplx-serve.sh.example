@@ -9,8 +9,12 @@ set -euo pipefail
 # mtplx 可执行文件的【绝对路径】（隔离 venv 内）
 MTRLX_BIN="/ABS/PATH/TO/your/python/venv/bin/mtplx"
 
-# 生成 / 嵌入模型（HuggingFace 官方命名空间；可换其他 Qwen3.8-27B / Embedding 变体）
-GEN_MODEL=Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality
+# 生成 / 嵌入模型（HuggingFace 官方命名空间）
+# 推荐（2026-10-29 起）：稀疏 MoE 35B-A3B，激活仅 3B，MLX 上吞吐反高于稠密 27B；
+#   必须使用 MLX 格式权重（mlx-community/Qwen3.6-35B-A3B-4bit，~20.4GB），
+#   不能直接加载 llama.cpp 的 GGUF（如 21.9GB GGUF 属另一格式）。
+# 备选：Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality（稠密 27B，~18GB）。
+GEN_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
 EMB_MODEL=mlx-community/Qwen3-Embedding-4B-4bit-DWQ
 
 # 临时镜像绕行（可选）：官方 huggingface.co 不可达时改用 hf-mirror.com

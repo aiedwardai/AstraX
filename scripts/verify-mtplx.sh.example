@@ -16,9 +16,21 @@ curl -s -X POST http://127.0.0.1:8000/v1/embeddings \
   -d '{"model":"mlx-community/Qwen3-Embedding-4B-4bit-DWQ","input":["验证向量维度"]}' \
   | "$PYTHON" -c 'import sys, json; d=json.load(sys.stdin); print("维度:", len(d["data"][0]["embedding"]))'
 
-echo "=== 3. 生成推理实测 (Qwen3.8-27B) ==="
+# 注：Qwen3.6 为推理型模型，默认先产出 reasoning 思考块再给可见回答；
+# 小 max_tokens 会被思考吃光导致 content 为空，故此处给足预算并兼容两类输出。
+echo "=== 3. 生成推理实测 (Qwen3.6-35B-A3B) ==="
 curl -s -X POST http://127.0.0.1:8000/v1/chat/completions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"mtplx-qwen38-27b-optimized-quality","messages":[{"role":"user","content":"一句话证明你在线"}],"max_tokens":32}' \
-  | "$PYTHON" -c 'import sys, json; print("回答:", json.load(sys.stdin)["choices"][0]["message"]["content"].strip())'
+  -d '{"model":"qwen3.6-35b-a3b-4bit","messages":[{"role":"user","content":"一句话证明你在线。"}],"max_tokens":768,"temperature":0.6}' \
+  | "$PYTHON" -c 'import sys, json
+d=json.load(sys.stdin)
+m=d["choices"][0]["message"]
+ct=(m.get("content") or "").strip()
+rc=(m.get("reasoning_content") or "").strip()
+if ct:
+    print("回答:", ct)
+elif rc:
+    print("回答:（仍在思考，未出可见文本）思考块已生成 %d 字符" % len(rc))
+else:
+    print("回答: 空（异常）")'
