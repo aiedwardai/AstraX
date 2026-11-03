@@ -76,7 +76,7 @@ curl -s -H "Authorization: Bearer $(cat ~/.mtplx/api-key)" http://127.0.0.1:8000
     <key>EnvironmentVariables</key>
     <dict>
         <key>MTPLX_RELAY_BIND_IP</key>
-        <string>192.168.139.3</string><!-- 改为 ifconfig bridge100 的真实 IP -->
+        <string><ORBSTACK_BRIDGE_IP></string><!-- 改为 ifconfig bridge100 的真实 IP -->
         <key>MTPLX_RELAY_PORT</key>
         <string>8000</string>
         <key>MTPLX_BACKEND_PORT</key>

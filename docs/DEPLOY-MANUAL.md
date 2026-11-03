@@ -22,9 +22,10 @@
 | 角色 | 模型 | 精度 / 体积 | 状态 |
 |---|---|---|---|
 | **生成（当前主力）** | `mlx-community/Qwen3.6-35B-A3B-4bit` | MLX 4bit，~19 GB（35B 总参 / 3B 激活 MoE） | ✅ 在线 |
-| **生成（回滚保留）** | `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality` | MLX，~28 GB（权重仍缓存，未删；64GB 机型与 35B-A3B 不可同时常驻） | ⏸ 缓存保留 |
+| **生成（回滚保留 / 备选）** | `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality` | MLX，~28 GB（权重仍缓存，未删；64GB 机型与 35B-A3B 不可同时常驻） | ⏸ 缓存保留 |
 | **嵌入（同进程）** | `mlx-community/Qwen3-Embedding-4B-4bit-DWQ` | MLX 4bit DWQ，~2.1 GB（维度 2560） | ✅ 在线 |
 
+> 🔀 **双模型热切换**：27B 与 35B-A3B 通过状态文件 `~/.mtplx/active-model`（值 `27b`/`35b`，默认 `35b`）切换，运行 `bash <HOME>/WorkBuddy/服务器部署相关/switch-mtplx-model.sh 27b|35b` 即可；切换后即持久化（launchd 按状态文件拉起对应模型）。详见第 8 节。
 > ⚠️ **格式陷阱**：网上 `21.9GB GGUF` 是 llama.cpp 格式，本 MLX 栈**不能直接加载**，必须用 MLX 权重。
 > ✅ **引擎已原生支持** `qwen3_5_moe` 架构（含 Gated-DeltaNet 线性注意力），无需升级 `mtplx`。
 > 💡 35B-A3B 为推理模型，默认走 `<thinking>` 思考块；小 `max_tokens`（如 64）会被思考吃光而"看似空回答"，给足（如 2048）即正常出字；其 `supports_vision: true`（原生支持看图，无需单独 mmproj）。
@@ -97,7 +98,7 @@ pkill -f mtplx-relay.py; pkill -f mtplx.server.openai; sleep 2
 # 4) 验证：lsof -nP -iTCP:8000 -sTCP:LISTEN 应见 python3 @<ORBSTACK_BRIDGE_IP>:8000
 #    curl -s --noproxy '*' http://127.0.0.1:3000/health  → {"status":true}
 ```
-> 浏览器开 `http://127.0.0.1:3000` → 把对话模型切到 **`Qwen3.6-35B-A3B-4bit`**（旧 `mtplx-qwen38-27b-optimized-quality` 已不存在）。
+> 浏览器开 `http://127.0.0.1:3000` → 在对话模型下拉框选择当前激活模型（默认 `Qwen3.6-35B-A3B-4bit`；若已切到 27B 则选 `mtplx-qwen38-27b-optimized-quality`）。
 
 ---
 
@@ -118,11 +119,23 @@ pkill -f mtplx-relay.py; pkill -f mtplx.server.openai; sleep 2
 
 ---
 
-## 8. 回滚到 27B（如需）
+## 8. 模型切换（27B ↔ 35B-A3B 热切换）
 
-1. 改 `mtplx-serve.sh` 的 `GEN_MODEL` → `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality`（权重已缓存，重启即加载、不重下）。
-2. 停 35B-A3B 再起 27B（**64GB 不可同时常驻**两者）。
-3. OpenWebUI / Obsidian 内把模型 ID 切回旧值。
+> 64GB 机型上 35B-A3B 与 27B 不可同时常驻，切换=写状态文件+重启 MTPLX（几秒权重重载）；切换后即持久化（launchd 按状态文件拉起对应模型）
+
+| 切换键 | 模型 | 角色 |
+|---|---|---|
+| `35b` | `mlx-community/Qwen3.6-35B-A3B-4bit` | 生成（当前主力） |
+| `27b` | `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality` | 生成（回滚保留 / 备选） |
+
+**一键切换（真实 Terminal.app 执行，勿在 WorkBuddy 沙箱跑）**：
+```bash
+bash <HOME>/WorkBuddy/服务器部署相关/switch-mtplx-model.sh 27b|35b
+```
+- 脚本写状态文件 `~/.mtplx/active-model` → 自动检测 launchd（用 `launchctl kickstart -k`）/ 裸 nohup（用 `pkill`+`nohup`）重启 MTPLX；中继与 OpenWebUI 全程不中断。
+- 重启后回 OpenWebUI(:3000) 下拉框**重新点选**对应模型即可对话（旧模型 id 会消失）。
+- 切换后即使重启 Mac，launchd 也按状态文件拉起最后所选模型（切换即持久化）。
+- 切换逻辑映射集中在 `<HOME>/WorkBuddy/服务器部署相关/mtplx-models.sh`（被 `mtplx-serve.sh` / `switch-mtplx-model.sh` / `verify-mtplx.sh` / `enable-mtplx-persistence.sh` 共用）。
 
 ---
 
@@ -145,6 +158,8 @@ pkill -f mtplx-relay.py; pkill -f mtplx.server.openai; sleep 2
 | `~/Library/LaunchAgents/com.user.mtplx-relay.plist` | launchd 定义（中继，含 MTPLX_RELAY_BIND_IP） |
 | `~/.mtplx/models/` | 模型权重缓存（35B-A3B + 27B 两份 + 嵌入 4B） |
 | `~/.mtplx/api-key` | MTPLX 鉴权密钥（权限 600） |
+| `<HOME>/WorkBuddy/服务器部署相关/mtplx-models.sh` | 双模型预设映射单一事实源（key→模型名/served-id + 状态文件读写，被各脚本共用） |
+| `<HOME>/WorkBuddy/服务器部署相关/switch-mtplx-model.sh` | 双模型一键热切换（写状态文件 + 自动 launchd/nohup 重启，中继/OWUI 不中断） |
 
 ---
 

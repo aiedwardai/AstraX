@@ -71,11 +71,14 @@ ifconfig bridge100 | awk '/inet /{print $2}'   # 例如 <ORBSTACK_BRIDGE_IP>
 > ⚠️ `bridge100` 的 IP 由 OrbStack 分配，**重装/换网可能变化**；若中继起不来先查 `ifconfig bridge100` 是否变了，变了就重填。
 
 ### 4.3 写入绑定 IP 并加载中继（launchd 常驻）
-> ⚠️ `launchctl load` 在本自动化 shell 上下文会被拒（EIO，与 Phase A 同源），**需在真实 Terminal.app 执行**：
+> ⚠️ 现代 macOS 已废弃 `launchctl load`/`unload`（对用户级 job 一律报 `Load failed: 5: Input/output error`），**必须改用 `bootstrap`/`bootout`**；且需在真实 Terminal.app 执行（WorkBuddy 沙箱 shell 同样会被内核拒）：
 ```bash
 # plist 当前已填 <ORBSTACK_BRIDGE_IP>（本次实测值）；若 bridge100 IP 变了请先改再加载：
 #   编辑 <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist 的 MTPLX_RELAY_BIND_IP
-launchctl load <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+UID=$(id -u)
+launchctl bootout  gui/$UID/com.user.mtplx-relay 2>/dev/null
+launchctl bootstrap gui/$UID <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+launchctl enable    gui/$UID/com.user.mtplx-relay
 # 验证：lsof -nP -iTCP:8000 -sTCP:LISTEN 应看到 python3 监听在 <ORBSTACK_BRIDGE_IP>:8000（而非 127.0.0.1）
 ```
 
@@ -95,7 +98,7 @@ docker run -d \
 ### 4.5 验收
 ```bash
 curl -s --noproxy '*' http://127.0.0.1:3000/ -o /dev/null -w "OWUI HTTP=%{http_code}\n"
-# 浏览器开 http://127.0.0.1:3000 → 注册管理员 → 选模型 mtplx-qwen38-27b-optimized-quality → 发消息验证流式
+# 浏览器开 http://127.0.0.1:3000 → 注册管理员 → 选模型 qwen3.6-35b-a3b-4bit → 发消息验证流式
 # 进阶：在 OWUI 内「Workspace → Models」确认 27B 在线，对话能正常返回即全链路打通
 ```
 
@@ -135,7 +138,7 @@ curl -s --noproxy '*' http://127.0.0.1:3000/ -o /dev/null -w "OWUI HTTP=%{http_c
 → **MTPLX 与中继目前都未接入 launchd**，是 OWUI 能连 MTPLX 的唯一兜底。本 WorkBuddy 会话一旦关闭，两个手动进程可能随之回收，Open WebUI 将立即失去后端。
 
 ### 你必须做的（在真实 Terminal.app 执行）
-> ⚠️ `launchctl load` 在 WorkBuddy 沙箱 shell 内会被内核拒（EIO），**务必在真实 Terminal.app 运行**，不要在本对话内执行。
+> ⚠️ 现代 macOS 已废弃 `launchctl load`/`unload`（报 `Load failed: 5: Input/output error`），必须用 `bootstrap`/`bootout`（见下方命令）；且须在真实 Terminal.app 运行，不要在本对话内执行。
 
 **推荐：一键脚本**（已实测语法/权限，含 OrbStack 启动、IP 校验、停手动进程、加载、验收、失败回退）：
 ```bash
@@ -165,7 +168,7 @@ curl -s --noproxy '*' http://127.0.0.1:3000/ -o /dev/null -w "OWUI HTTP=%{http_c
 
 ### 回滚
 ```bash
-launchctl unload <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+launchctl bootout gui/$(id -u)/com.user.mtplx-relay 2>/dev/null
 nohup python3 "<DEPLOY_DIR>/mtplx-relay.py" \
   > <MTPLX_STATE_DIR>/logs/relay.out.log 2>&1 &
 ```
@@ -175,8 +178,10 @@ nohup python3 "<DEPLOY_DIR>/mtplx-relay.py" \
 ```bash
 ifconfig bridge100 | awk '/inet /{print $2}'   # 取新 IP
 # 改 <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist 的 MTPLX_RELAY_BIND_IP
-launchctl unload <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
-launchctl load  <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+UID=$(id -u)
+launchctl bootout  gui/$UID/com.user.mtplx-relay 2>/dev/null
+launchctl bootstrap gui/$UID <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+launchctl enable    gui/$UID/com.user.mtplx-relay
 ```
 
 ---

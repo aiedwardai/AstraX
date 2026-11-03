@@ -1,6 +1,6 @@
 # MTPLX — Apple Silicon 本地 AI 实验室栈
 
-> 一份本地优先、隐私优先的 Apple Silicon 推理栈文档。它把 **Qwen3.8-27B**（生成）与 **Qwen3-Embedding-4B**（嵌入）同进程托管在 `mtplx` 运行时上，对外暴露 OpenAI 兼容接口，仅回环绑定并带 api-key 鉴权；两类前端接入——**OpenWebUI（OrbStack 容器）** 经 TCP 中继够到仅回环服务，**Obsidian（Smart Connections / Copilot，原生同机）** 直连回环地址。
+> 一份本地优先、隐私优先的 Apple Silicon 推理栈文档。它把 **Qwen3.6-35B-A3B（MoE，生成）** 与 **Qwen3-Embedding-4B**（嵌入）同进程托管在 `mtplx` 运行时上，对外暴露 OpenAI 兼容接口，仅回环绑定并带 api-key 鉴权；两类前端接入——**OpenWebUI（OrbStack 容器）** 经 TCP 中继够到仅回环服务，**Obsidian（Smart Connections / Copilot，原生同机）** 直连回环地址。
 >
 > 本文档刻意对照参考仓库 [`qwen3.8-27b-apple-silicon-agent`](https://github.com/t64c6d7mc5-debug/qwen3.8-27b-apple-silicon-agent) 的结构编写，但记录的是**本工作区实际落地的方案**，而非该仓库的上游 `mlx-serve` + Qwen Code 方案。二者的差异见文末「与参考仓库的差异」。
 
@@ -10,7 +10,7 @@
 
 | 组件    | 参考设置                                                                                            |
 | ----- | ----------------------------------------------------------------------------------------------- |
-| 生成模型  | `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality`                                                 |
+| 生成模型  | **当前**：`mlx-community/Qwen3.6-35B-A3B-4bit`（MoE，35B 总参/3B 激活，~20.4GB）<br/>**回滚保留**：`Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality`（28GB 仍缓存，未删） |
 | 嵌入模型  | `mlx-community/Qwen3-Embedding-4B-4bit-DWQ`（向量维度 2560，自动识别）                                     |
 | 运行时   | `mtplx`，运行于本机受管 Python 3.13 venv：`<HOME>/.workbuddy/binaries/python/envs/mtplx/bin/mtplx` |
 | 客户端   | OpenWebUI（OrbStack 容器，`:3000`）+ Obsidian Smart Connections / Copilot（原生同机）                      |
@@ -56,6 +56,19 @@
 
 ---
 
+## 当前部署状态（2026-11-03 快照）
+
+> 以下为本地实际落地状态，非纸面方案。细节见 `OpenWebUI容器访问MTPLX方案.md` 第八节与 `MTPLX模型升级总结_27B到35B-A3B.md`。
+
+- **生成模型**：`mlx-community/Qwen3.6-35B-A3B-4bit`（MoE，35B 总参 / 3B 激活，MLX 4bit ~20.4GB）。27B 权重 `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality` 仍完整缓存于 `<MTPLX_STATE_DIR>/models/`（28GB），可随时回滚；但 64GB 机型两模型**不可同时常驻**（峰值合计 >64GB）。
+- **引擎**：`mtplx` 2.12.2（基于 mlx-lm 0.31.3 / mlx 0.32.2），**已原生支持 `qwen3_5_moe` 架构（含 Gated-DeltaNet），无需升级**。⚠️ 网上 `21.9GB GGUF` 是 llama.cpp 格式，本 MLX 栈**不能直接加载**，必须改用 MLX 权重。
+- **实测性能**：生成吞吐 **~113 tok/s**（含推理思考）；Swap 仅 ~642MB，无颠簸。
+- **进程托管**：MTPLX 与中继当前为**手动 nohup 进程**，尚未接入 launchd。须在真实 Terminal 运行 `bash <DEPLOY_DIR>/enable-mtplx-persistence.sh` 一键接管常驻（含失败回退）。⚠️ `launchctl load` 在现代 macOS 已废弃（报 `Load failed: 5: Input/output error`），须用 `bootstrap` / `enable` / `bootout`。
+- **前端（OpenWebUI）当前状态**：⚠️ **暂不可访问**——`OrbStack` 处于 Stopped，桥接 IP `<ORBSTACK_BRIDGE_IP>` 消失，中继套接字 CLOSED，OWUI 容器未起。模型 API 自身正常（`:8000` 在服）。恢复仅需 `orbctl start` + 重启中继（见 `OpenWebUI容器访问MTPLX方案.md` 4.3 / 第七节）。
+- **知识库/代码仓库**：本地部署文档与脱敏版已推送至 `github.com/aiedwardai/AstraX`（原 `AI-Lab`，远端已更名，旧地址仍重定向）。
+
+---
+
 ## 架构（Architecture）
 
 本栈四类本地组件，全部经模板与环境变量配置，而非写死机器专属路径：
@@ -63,7 +76,7 @@
 ```mermaid
 flowchart LR
     subgraph Local["本机 macOS（Mac Studio M5 Max / 64GB）"]
-        MTPLX["MTPLX 守护进程<br/>127.0.0.1:8000<br/>生成 27B + 嵌入 4B<br/>api-key 鉴权"]
+        MTPLX["MTPLX 守护进程<br/>127.0.0.1:8000<br/>生成 35B-A3B + 嵌入 4B<br/>api-key 鉴权"]
         RELAY["TCP 中继 mtplx-relay.py<br/>监听 bridge100 私有 IP:8000<br/>转发 → 127.0.0.1:8000"]
     end
     subgraph Native["原生前端（同机）"]
@@ -104,9 +117,10 @@ flowchart LR
 
 | 模型规格      |              量化精度 |       预估生成吞吐 | 首字延迟 (TTFT) |   内存开销 | 说明                        |
 | --------- | ----------------: | -----------: | ----------: | -----: | ------------------------- |
-| 27B（本栈主力） | Optimized-Quality | ~18–25 tok/s |   0.8–1.5 s | ~18 GB | 相当于正常打字速度，适合深度报告起草与复杂代码修改 |
+| 27B（回滚保留） | Optimized-Quality | ~18–25 tok/s |   0.8–1.5 s | ~18 GB | 原主力；权重仍缓存，可切回，但 64GB 机型与 35B-A3B 不可同时常驻 |
+| 35B-A3B（当前主力） | MLX 4bit（MoE） | **实测 ~113 tok/s** |   ~1 s | ~20.4 GB | 35B 总参仅激活 3B，MoE 低激活使吞吐高于 27B；原生支持看图（`supports_vision`） |
 
-**实测注意项（已验证）**：该 27B 为 **Qwen3（带 reasoning 思考过程）**，思考会占用 token。若 `max_tokens` 过小（如 64），`content` 可能被思考占满而显空——给足 `max_tokens`（如 256+）即可正常出字。
+**实测注意项（已验证）**：当前主力 **35B-A3B** 与保留的 27B 均为 **Qwen3（带 reasoning 思考过程）**，思考会占用 token。若 `max_tokens` 过小（如 64），`content` 可能被思考占满而显空——给足 `max_tokens`（如 2048）即可正常出字。35B-A3B 实测吞吐 **~113 tok/s**（远超 27B 的 18–25 tok/s），印证 MoE 仅激活 3B 在 MLX 上的优势；`/v1/models` 显示其 `supports_vision: true`（原生支持看图，无需单独 mmproj）。
 
 资源边界：实测引擎预算 **48.0 GiB**（64G Mac 自动规划），其中 27B 权重固定占 **27.9 GiB**，剩余约 20 GiB 供 live KV + session bank；256k 上下文下单会话 KV 上限≈17 GiB。macOS 自身约 8GB、Docker/开发环境约 8GB，余量远小于纸面预估的 30GB，**长上下文并发易顶满 48G 触发 `overloaded`（见故障排查）**。本机适合单人、低并发（1–2 任务）；高并发场景应走云端协同路由（P2）。
 
@@ -121,7 +135,7 @@ flowchart LR
 - 中继双验证通过：①本地 `127.0.0.1:18000 → 127.0.0.1:8000` 透传真实对话成功；②桥接绑定后容器内 `curl http://host.docker.internal:8000/v1/models` 返回 **HTTP 200**。
 - OpenWebUI 0.12.2 拉起，`--restart always`，UI 仅绑 `127.0.0.1:3000`。
 - 管理员注册真实路径：`POST /api/v1/auths/signup`（**不是** `/api/auth/register`），首用户自动为 admin 并关闭公开注册。
-- 模型识别：`GET /api/models` 返回 `mtplx-qwen38-27b-optimized-quality`，端到端对话正常返回。
+- 模型识别：`GET /api/models` 当前返回 `qwen3.6-35b-a3b-4bit`（2026-10-29 由 27B 切换）；端到端对话正常返回。
 
 ---
 
@@ -157,7 +171,7 @@ flowchart LR
 
 | 现象                                      | 原因                                                           | 处理                                                                                                                                 |
 | --------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 容器连不上 MTPLX                             | 中继未常驻（方案 E）或 `bridge100` IP 变化                               | 确认 `launchctl load <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist`；`ifconfig bridge100` 取新 IP 回填 `MTPLX_RELAY_BIND_IP` 后 reload |
+| 容器连不上 MTPLX                             | 中继未常驻（方案 E）或 `bridge100` IP 变化                               | 确认中继经 launchd 常驻：`launchctl bootstrap gui/$UID <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist` + `launchctl enable gui/$UID/com.user.mtplx-relay`；`ifconfig bridge100` 取新 IP 回填 `MTPLX_RELAY_BIND_IP` 后 `bootout` 再 `bootstrap` |
 | 中继起不来，`Cannot assign requested address` | 误绑 `host.docker.internal` 解析到的 `0.250.250.254`（魔法地址，宿主接口不存在） | 改绑 `bridge100` 真实 IP（如 `<ORBSTACK_BRIDGE_IP>`）                                                                                            |
 | 对话内容空白                                  | Qwen3 思考 token 占满 `max_tokens`                               | 调大 `max_tokens`（如 ≥256）                                                                                                            |
 | `401 / 403`                             | api-key 不匹配                                                  | 确认客户端填的是 `<MTPLX_STATE_DIR>/api-key` 当前内容                                                                                                   |
@@ -174,7 +188,7 @@ rm -f <DEPLOY_DIR>/mtplx-serve.sh
 rm -rf <MTPLX_STATE_DIR>/models/<模型目录>
 
 # 中继：卸载 launchd 常驻，可临时以 nohup 兜底
-launchctl unload <LAUNCH_AGENTS_DIR>/com.user.mtplx-relay.plist
+launchctl bootout gui/$(id -u)/com.user.mtplx-relay
 nohup python3 "<DEPLOY_DIR>/mtplx-relay.py" \
   > <MTPLX_STATE_DIR>/logs/relay.out.log 2>&1 &
 ```
@@ -196,7 +210,7 @@ nohup python3 "<DEPLOY_DIR>/mtplx-relay.py" \
 | 维度         | 本栈（MTPLX）                                       | 参考仓库（mlx-serve + Qwen Code）               |
 | ---------- | ----------------------------------------------- | ----------------------------------------- |
 | 服务程序       | 自研 `mtplx`（venv）                                | 上游 `mlx-serve` (ddalcu)                   |
-| 生成模型       | `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality` | `ddalcu/Qwen3.8-27B-MLX-Serve-8bit`       |
+| 生成模型       | `mlx-community/Qwen3.6-35B-A3B-4bit`（2026-10-29 切换；27B 权重仍缓存可回滚） | `ddalcu/Qwen3.8-27B-MLX-Serve-8bit`       |
 | 嵌入模型       | 同进程 `Qwen3-Embedding-4B`                        | 未内置                                       |
 | 客户端        | OpenWebUI（容器）+ Obsidian（原生）                     | Qwen Code（CLI 编码 Agent，Coding-Lean 画像）    |
 | 容器接入       | TCP 中继（方案 E，MTPLX 零改动保持回环）                      | 不适用（同机 CLI）                               |

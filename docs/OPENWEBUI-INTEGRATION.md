@@ -38,9 +38,9 @@ flowchart LR
 ## 三、关键修正（实测坑）
 
 1. **桥接 IP 机制**：容器内 `host.docker.internal` 解析到 **虚拟路由 IP `0.250.250.254`**（OrbStack 魔术地址，宿主接口上不存在，**不可绑**）。
-2. **中继真正要绑**的是宿主 **`bridge100` 接口的真实 IP**（本次实测 `192.168.139.3`）：
+2. **中继真正要绑**的是宿主 **`bridge100` 接口的真实 IP**（本机实测值形如 `<ORBSTACK_BRIDGE_IP>`）：
    ```bash
-   ifconfig bridge100 | awk '/inet /{print $2}'   # 例如 192.168.139.3
+   ifconfig bridge100 | awk '/inet /{print $2}'   # 例如 <ORBSTACK_BRIDGE_IP>
    ```
 3. `bridge100` 的 IP 由 OrbStack 分配，重装/换网可能变化；若中继起不来先查 `ifconfig bridge100` 是否变了，变了就重填。
 4. `mtplx-relay.py` 优先读环境变量 `MTPLX_RELAY_BIND_IP`，缺省自动探测（orbctl / `/etc/hosts`）兜底；探测失败回退 `0.0.0.0` 并明确告警（此时需配合方案 A 的 pf 收紧）。

@@ -27,7 +27,7 @@
 统一参数（全文复用）：
 - Base URL：`http://127.0.0.1:8000/v1`
 - API Key：读取 `<MTPLX_STATE_DIR>/api-key` 的内容（MTPLX 校验此 key，必须填真值）
-- 聊天模型：`mtplx-qwen38-27b-optimized-quality`
+- 聊天模型：`qwen3.6-35b-a3b-4bit`（2026-10-29 由 27B 切换；旧 `mtplx-qwen38-27b-optimized-quality` 权重仍缓存可回滚）
 - 嵌入模型：`Qwen3-Embedding-4B-4bit-DWQ`（维度 2560，插件通常自动识别，无需手填）
 
 > 取 key 的一条命令：`cat <MTPLX_STATE_DIR>/api-key`
@@ -74,7 +74,7 @@ Obsidian → 设置 → 第三方插件 → 关闭安全模式 → 浏览 → �
       "name": "mtplx-local",
       "baseUrl": "http://127.0.0.1:8000/v1",
       "apiKey": "在此粘贴 <MTPLX_STATE_DIR>/api-key 的内容",
-      "models": ["Qwen3-Embedding-4B-4bit-DWQ", "mtplx-qwen38-27b-optimized-quality"]
+      "models": ["Qwen3-Embedding-4B-4bit-DWQ", "qwen3.6-35b-a3b-4bit"]
     }
   ]
 }
@@ -90,7 +90,7 @@ Obsidian → 设置 → 第三方插件 → 关闭安全模式 → 浏览 → �
 |---|---|
 | Model Provider | `Custom OpenAI` |
 | Base URL | `http://127.0.0.1:8000/v1` |
-| Model | `mtplx-qwen38-27b-optimized-quality` |
+| Model | `qwen3.6-35b-a3b-4bit` |
 | API Key | `cat <MTPLX_STATE_DIR>/api-key` 的内容 |
 | Embeddings Model（用于 vault QA） | `Qwen3-Embedding-4B-4bit-DWQ` |
 | Base URL（Embeddings，若单独填） | `http://127.0.0.1:8000/v1` |
