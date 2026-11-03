@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>第二大脑（Personal AI Lab）部署架构图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #1f2933;
+    --muted: #69707d;
+    --border: #e4e7eb;
+    --accent: #1565c0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 24px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  header {
+    max-width: 1100px;
+    margin: 0 auto 24px;
+  }
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px;
+    color: var(--accent);
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+  .canvas {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    overflow-x: auto;
+  }
+  .legend {
+    max-width: 1100px;
+    margin: 20px auto 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .legend-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .legend-item b { display: block; margin-bottom: 4px; }
+  .legend-item span { color: var(--muted); }
+  footer {
+    max-width: 1100px;
+    margin: 24px auto 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>第二大脑（Personal AI Lab）部署架构图</h1>
+    <p class="subtitle">
+      本地优先 · 127.0.0.1 回环隔离 · 数据三级分类（L1–L3）· 混合协同路由 · 3-2-1 备份
+    </p>
+  </header>
+
+  <div class="canvas">
+    <div class="mermaid">
+graph TB
+    classDef ext fill:#E3F2FD,stroke:#1565C0,color:#0D47A1;
+    classDef ingest fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20;
+    classDef ai fill:#FFF3E0,stroke:#E65100,color:#BF360C;
+    classDef store fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C;
+    classDef rag fill:#E0F7FA,stroke:#00838F,color:#006064;
+    classDef ui fill:#FFF9C4,stroke:#F9A825,color:#F57F17;
+    classDef sec fill:#FFEBEE,stroke:#C62828,color:#B71C1C;
+
+    subgraph EXT["① 外部信息源 / 输入端"]
+        WebNews["公开资讯 行业新闻<br/>LNG · 科技 · 投研"]
+        WeChat["猫笔刀 微信公众号<br/>(直连公众号源)"]
+        Docs["文档 PDF 代码仓库<br/>(本地 & 云端)"]
+        Email["邮件 网页剪藏<br/>Capture 入口"]
+        Voice["语音 会议纪要<br/>(ASR 转写)"]
+    end
+
+    subgraph INGEST["② 采集与编排层"]
+        Scheduler["自动化调度器<br/>Hermes Scheduler · cron 08:00"]
+        Pipeline["采集清洗流水线<br/>抓取 → 去重 → 分块"]
+        Classify["内容分级分类<br/>L1 公开 / L2 内部 / L3 机密"]
+    end
+
+    subgraph AI["③ 智能与推理层"]
+        Gateway["统一路由网关<br/>127.0.0.1 仅本地回环"]
+        Audit["调用审计与脱敏<br/>Token 自动掩码"]
+        LocalLLM["本地推理引擎<br/>Ollama / MLX-LM 7B–27B"]
+        CloudAPI["云端协同 API<br/>DeepSeek-V3/R1 复杂推理"]
+    end
+
+    subgraph STORE["④ 存储与数据层 ~/AI-Lab"]
+        Raw["01_models · 02_data/raw<br/>模型权重 · 原始材料"]
+        KB["03_knowledge · Obsidian Vault<br/>Git 版本化笔记库"]
+        Vectors["04_storage_indices<br/>ChromaDB / LanceDB 向量库"]
+        Logs["05_logs · 审计日志<br/>不含密钥元数据"]
+        Config["06_config · 配置回退清单<br/>env / rollback"]
+        Backup["独立备份目标<br/>本地快照 · 3-2-1 外部介质"]
+    end
+
+    subgraph RAG["⑤ RAG 检索增强层"]
+        Embed["嵌入与索引构建<br/>Embedding + 分块重建"]
+        Retriever["语义检索器<br/>向量召回 + 重排"]
+        Prompt["提示词拼装<br/>上下文压缩"]
+    end
+
+    subgraph UI["⑥ 交互与输出层"]
+        Chat["对话 问答界面<br/>WebUI / CLI / Hermes"]
+        Brief["AI 晨报 周报<br/>每日 Markdown 落盘"]
+        PPT["结构化报告 PPT<br/>PPT Master 渲染"]
+        Graph["知识图谱回溯<br/>双向链接"]
+    end
+
+    subgraph SEC["⑦ 安全与运维底座"]
+        Loopback["网络隔离<br/>仅 127.0.0.1 · 防火墙"]
+        Security["数据安全分级 L1–L3<br/>脱敏管道 · 强制打码"]
+        Monitor["可观测性监控<br/>冒烟指标 · 资源复核"]
+    end
+
+    WebNews --> Pipeline
+    WeChat --> Pipeline
+    Docs --> Pipeline
+    Email --> Pipeline
+    Voice --> Pipeline
+    Scheduler --> Pipeline
+    Pipeline --> Classify
+    Classify --> Gateway
+    Gateway --> Audit
+    Gateway -->|高频常规任务| LocalLLM
+    Gateway -->|复杂推理外派| CloudAPI
+    LocalLLM --> KB
+    CloudAPI -->|脱敏后| KB
+    Pipeline --> Raw
+    Pipeline --> KB
+    KB --> Embed
+    Embed --> Vectors
+    Chat --> Gateway
+    Chat --> Prompt
+    Retriever --> Prompt
+    Vectors --> Retriever
+    KB --> Retriever
+    Prompt --> Brief
+    Prompt --> PPT
+    Prompt --> Graph
+
+    Loopback -.守护.-> Gateway
+    Security -.约束.-> Classify
+    Monitor -.观测.-> LocalLLM
+    Monitor -.观测.-> Pipeline
+    Raw --> Backup
+    KB --> Backup
+    Config --> Backup
+    Logs --> Monitor
+
+    class WebNews,WeChat,Docs,Email,Voice ext;
+    class Scheduler,Pipeline,Classify ingest;
+    class Gateway,Audit,LocalLLM,CloudAPI ai;
+    class Raw,KB,Vectors,Logs,Config,Backup store;
+    class Embed,Retriever,Prompt rag;
+    class Chat,Brief,PPT,Graph ui;
+    class Loopback,Security,Monitor sec;
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><b style="color:#1565C0">① 外部信息源</b><span>多渠道内容捕获入口</span></div>
+    <div class="legend-item"><b style="color:#2E7D32">② 采集与编排</b><span>Hermes 调度 · 清洗 · 分级</span></div>
+    <div class="legend-item"><b style="color:#E65100">③ 智能与推理</b><span>本地 LLM + 云端协同</span></div>
+    <div class="legend-item"><b style="color:#6A1B9A">④ 存储与数据</b><span>模型/知识/向量/备份</span></div>
+    <div class="legend-item"><b style="color:#00838F">⑤ RAG 增强</b><span>嵌入 · 召回 · 拼装</span></div>
+    <div class="legend-item"><b style="color:#F57F17">⑥ 交互输出</b><span>对话 · 晨报 · PPT · 图谱</span></div>
+    <div class="legend-item"><b style="color:#C62828">⑦ 安全运维</b><span>隔离 · 分级 · 监控</span></div>
+  </div>
+
+  <footer>
+    架构遵循项目 rule.md「先出架构图 → 再做安全审计 → 规范数据分层」工作流。
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      themeVariables: {
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+        fontSize: "14px",
+        background: "#ffffff",
+        primaryColor: "#ffffff",
+        primaryTextColor: "#1f2933",
+        lineColor: "#9aa5b1",
+        primaryBorderColor: "#cbd2d9"
+      },
+      flowchart: { nodeSpacing: 30, rankSpacing: 50, curve: "basis" }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 实验室部署目标架构图</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "base",
+      themeVariables: { fontFamily: "sans-serif", fontSize: "14px" },
+      flowchart: { curve: "basis", nodeSpacing: 40, rankSpacing: 50 } });
+  </script>
+  <style>
+    body { margin: 0; padding: 24px; background: #ffffff; color: #1c1c1c; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+    .sub { color: #666; font-size: 13px; margin: 0 0 20px; }
+    .legend { margin-top: 20px; font-size: 13px; color: #444; line-height: 1.7; }
+    .legend code { background: #f3f3f3; padding: 1px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>AI 实验室部署目标架构图</h1>
+  <p class="sub">第二大脑（Obsidian + RAG）与 Open WebUI 共用 MTPLX 本地大模型底座 · 仅 127.0.0.1 回环</p>
+  <div class="mermaid">
+flowchart TB
+    subgraph EDGE["安全边界 · 仅 127.0.0.1 回环 · 不暴露公网"]
+        direction TB
+        MTPLX["MTPLX 大模型底座<br/>127.0.0.1:8000 · OpenAI 兼容<br/>27B 生成 + 4B 嵌入 同进程<br/>api-key 鉴权 · 零出境"]
+        subgraph FE["前端层（两个独立前端 · 共用同一后端）"]
+            direction LR
+            OBS["Obsidian · brain vault<br/>第二大脑插件（RAG）<br/>语义检索 + 笔记对话"]
+            OWU["Open WebUI<br/>容器运行（OrbStack/Podman/Colima）<br/>统一对话工作台"]
+        end
+        PERSIST["launchd 保活<br/>com.user.mtplx<br/>StandardOutPath 接管日志"]
+    end
+    REMOTE["远程访问（后续 · Tailscale 组网）<br/>严格 ACL · 不直暴露"]
+    EDGE -. 仅经 Tailscale 加密隧道 .-> REMOTE
+    OBS -->|chat + embeddings API| MTPLX
+    OWU -->|chat + embeddings API| MTPLX
+    PERSIST -. 守护 / 崩溃重启 .-> MTPLX
+  </div>
+  <div class="legend">
+    <strong>图例与职责</strong><br/>
+    · <code>实线</code>＝数据流（前端 → MTPLX 本地推理 → 返回；笔记在本地完成嵌入与检索，不出本机）。<br/>
+    · <code>虚线</code>＝安全运维贯穿（持久化保活、远程访问须经加密隧道）。<br/>
+    · 一个能力一个主负责人：模型推理只有 MTPLX 一个入口；Obsidian/第二大脑负责知识 RAG，Open WebUI 负责对话工作台，互不重叠，无需额外 LiteLLM。<br/>
+    · 修正：4B 是 <strong>Embedding 模型</strong>（供第二大脑 RAG），聊天仅有 27B。
+  </div>
+</body>
+</html>

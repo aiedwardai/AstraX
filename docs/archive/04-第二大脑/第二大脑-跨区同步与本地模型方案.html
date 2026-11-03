@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>第二大脑 · 跨区同步与本地模型部署方案</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { useMaxWidth: true } });</script>
+<style>
+  :root { --bg:#fff; --fg:#212121; --muted:#666; --line:#e0e0e0; --accent:#AD1457; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:32px; background:var(--bg); color:var(--fg);
+         font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; line-height:1.7; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { color: var(--accent); border-bottom: 3px solid var(--accent); padding-bottom: 8px; }
+  h2 { margin-top: 36px; color:#333; border-left: 4px solid var(--accent); padding-left: 10px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .card { background:#fafafa; border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin:16px 0; }
+  table { width:100%; border-collapse: collapse; margin:14px 0; }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; font-size:14px; }
+  th { background:#f3f3f3; }
+  code { background:#f0f0f0; padding:1px 5px; border-radius:4px; font-size:13px; }
+  .tag { display:inline-block; background:#FCE4EC; color:#880E4F; border-radius:6px; padding:2px 8px; font-size:12px; margin-right:6px; }
+  ol li, ul li { margin:6px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>第二大脑 · 跨区同步与本地模型部署方案</h1>
+  <p class="meta">设计依据：《第二大脑部署架构图》+ 项目 <code>rule.md</code>（先架构图 → 再安全审计 → 后编码）<br/>
+  场景：GitHub 仓库为「心形中间节点」，四叶子节点（硅谷 Hermes / 香港 MBP / 大陆 Windows / 香港 Mac Studio）围绕读写；Mac Studio 额外承担本地模型算力。</p>
+
+  <div class="card">
+    <span class="tag">痛点1</span> 大陆访问 GitHub 不稳 → 本地代理直连 +（兜底）经香港 Mac Studio 上的 Gitea 中继镜像。<br/>
+    <span class="tag">痛点2</span> 本地模型跨区调用 → Tailscale 零信任网状 VPN，Mac Studio 模型 API 仅经 Tailscale 暴露，绝不公网开放。
+  </div>
+
+  <h2>1. 架构总览</h2>
+  <div class="mermaid">
+graph TB
+    classDef hub fill:#FCE4EC,stroke:#AD1457,color:#880E4F;
+    classDef hk fill:#E3F2FD,stroke:#1565C0,color:#0D47A1;
+    classDef us fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20;
+    classDef cn fill:#FFF3E0,stroke:#E65100,color:#BF360C;
+    classDef net fill:#E0F7FA,stroke:#00838F,color:#006064;
+
+    GH[("GitHub 仓库<br/>心形中间节点 / 规范源")]
+    subgraph HK["香港"]
+        MBP["MacBook Pro<br/>WorkBuddy + Obsidian + Git"]
+        STU["Mac Studio<br/>Obsidian + 本地模型 Ollama"]
+    end
+    subgraph US["美国硅谷"]
+        HER["爱马仕 Hermes<br/>cron 定时产出 → 同步 GitHub"]
+    end
+    subgraph CN["大陆"]
+        WIN["Windows<br/>WorkBuddy + Obsidian + Git(代理)"]
+    end
+    TS["Tailscale 零信任网状 VPN"]
+
+    HER -->|push / pull| GH
+    MBP -->|push / pull| GH
+    WIN -->|代理 + push / pull| GH
+    GH -.镜像 / 兜底中继.-> STU
+    MBP -->|LAN / TS| STU
+    WIN -->|TS 加密隧道| STU
+    TS --- MBP
+    TS --- STU
+    TS --- WIN
+    TS --- HER
+
+    class GH hub;
+    class MBP,STU hk;
+    class HER us;
+    class WIN cn;
+    class TS net;
+  </div>
+
+  <h2>2. 网络与同步架构</h2>
+  <h3>2.1 同步链路</h3>
+  <ul>
+    <li><b>硅谷 Hermes</b>：定时（cron）采集/产出 → 写入 <code>10-Daily/YYYY-MM-DD-*.md</code> 与 <code>00-Inbox/</code> → 直接 push GitHub。日期戳文件天然无冲突。</li>
+    <li><b>香港 MBP</b>：Obsidian Git 自动 pull / commit / push；HK 本地网络直连 GitHub，稳定。</li>
+    <li><b>大陆 Windows</b>：经本地代理（Clash，127.0.0.1:7890）访问 GitHub；或经 Tailscale 先把变更推到 Mac Studio 上的 <b>Gitea 中继</b>，再由 Mac Studio 镜像到 GitHub（更稳、兜底）。</li>
+    <li><b>香港 Mac Studio</b>：主要作为算力节点；轻量 pull vault 用于本地检索 / 模型上下文，<b>不做高频写入</b>。</li>
+  </ul>
+  <h3>2.2 冲突规避（分治 + 高频提交）</h3>
+  <ul>
+    <li><b>目录分治</b>：Hermes → <code>00-Inbox/</code> + <code>10-Daily/</code>；人为编辑 → <code>20-Projects/</code>、<code>30-Notes/</code>；归档 → <code>90-Archive/</code>。</li>
+    <li><b>Obsidian Git</b>：启动自动 pull；每 10–15 分钟 auto-commit + auto-push；push 前强制 pull。</li>
+    <li><b>.gitignore</b>：忽略 <code>.obsidian/workspace*</code>、插件缓存、临时文件、密钥。</li>
+    <li><b>冲突处理</b>：Obsidian Git 标记冲突文件手动 merge；<code>daily/</code> 用日期戳几乎零冲突。</li>
+  </ul>
+
+  <h2>3. 本地模型服务（Mac Studio）</h2>
+  <div class="mermaid">
+sequenceDiagram
+    participant W as WorkBuddy(HK/Win)
+    participant TS as Tailscale 隧道
+    participant S as Mac Studio 本地模型
+    participant G as GitHub Vault
+    W->>G: pull 最新 vault
+    W->>TS: 调用模型(隐私/离线任务)
+    TS->>S: 转发至 Ollama(仅 TS 可达)
+    S-->>W: 推理结果(本地, 不出云)
+    W->>G: commit / push 笔记
+    Note over W,G: Hermes 每日定时写入 10-Daily/
+  </div>
+  <ul>
+    <li><b>运行时</b>：Ollama（最省心起步）/ LM Studio（OpenAI 兼容）/ vLLM（高吞吐）。</li>
+    <li><b>暴露方式</b>：<code>OLLAMA_HOST=0.0.0.0:11434</code>，但<b>只监听 Tailscale 接口</b>，不绑公网网卡。</li>
+    <li><b>调用</b>：HK MBP 与大陆 Windows 上 WorkBuddy 配置自定义 OpenAI 兼容 endpoint = <code>http://&lt;mac-studio.ts.net&gt;:11434</code>。</li>
+    <li><b>用途分层</b>：隐私 / 离线 / 长文本 → 本地模型；重负载 / 多模态 → WorkBuddy 云模型。</li>
+  </ul>
+
+  <h2>4. 零信任内网（Tailscale）</h2>
+  <ul>
+    <li>所有节点安装 Tailscale，组成 mesh。</li>
+    <li>收益：① 大陆 Windows 安全访问 Mac Studio 模型，免公网暴露；② 远程维护各节点；③ 替代脆弱的点对点端口映射。</li>
+    <li>可选：Mac Studio 作为 subnet / exit node（谨慎开启，注意合规）。</li>
+  </ul>
+
+  <h2>5. 安全审计（上线前必做，依据 rule.md）</h2>
+  <ol>
+    <li><b>身份鉴权</b>：GitHub 细粒度 PAT，仅授予该仓库 contents 读写；存于系统钥匙串 / Obsidian Git，不落明文；季度轮换。Tailscale 用带过期期的 key / SSO。</li>
+    <li><b>访问控制</b>：仓库私有；模型 API 仅 Tailscale 可达；节点间最小权限。</li>
+    <li><b>输入校验 / 注入</b>：网页剪藏等不可信内容优先本地模型推理，防泄露；WorkBuddy 提示词注意注入防护。</li>
+    <li><b>敏感数据加密</b>：敏感笔记用 git-crypt / Obsidian 加密插件；<code>.gitignore</code> + pre-commit 秘密扫描（gitleaks）；绝不提交密钥。</li>
+    <li><b>传输安全</b>：GitHub HTTPS + Tailscale WireGuard，全程加密；模型 API 不经公网明文。</li>
+    <li><b>第三方依赖</b>：Obsidian 社区插件仅装可信来源并锁定版本；定期审查。</li>
+    <li><b>备份 / 持久化（3-2-1）</b>：GitHub(云) + Mac Studio 本地 + 周期性离线备份（restic / 外置盘）。</li>
+    <li><b>合规</b>：大陆代理仅用于合法同步，遵守当地法规；不路由非法流量。</li>
+  </ol>
+
+  <h2>6. 分阶段实施路线</h2>
+  <table>
+    <tr><th>阶段</th><th>内容</th><th>关键产出</th></tr>
+    <tr><td>P0</td><td>组网</td><td>全节点装 Tailscale，成 mesh（使能项）</td></tr>
+    <tr><td>P1</td><td>规范源</td><td>建 GitHub 仓库、<code>.gitignore</code>、目录/分支模型、发放 PAT</td></tr>
+    <tr><td>P2</td><td>客户端同步</td><td>MBP / Windows / Mac Studio 配置 Obsidian Git，调自动同步与目录分治</td></tr>
+    <tr><td>P3</td><td>本地模型</td><td>Mac Studio 部署 Ollama + Tailscale 暴露 API，WorkBuddy 接 endpoint</td></tr>
+    <tr><td>P4</td><td>Hermes 接入</td><td>硅谷定时流水线写入 <code>10-Daily/</code></td></tr>
+    <tr><td>P5</td><td>安全加固</td><td>git-crypt、秘密扫描、备份、审计</td></tr>
+    <tr><td>P6</td><td>可观测</td><td>健康检查 / 同步状态看板</td></tr>
+  </table>
+
+  <h2>7. 待确认决策点</h2>
+  <ul>
+    <li>本地模型运行时：<b>Ollama / LM Studio / vLLM</b>？（推荐 Ollama 起步）</li>
+    <li>大陆 Windows 走「代理直连 GitHub」还是「经 Mac Studio Gitea 中继」？（建议两者并存：代理为主，Gitea 中继兜底）</li>
+    <li>Mac Studio 是否参与高频 Git 写入（建议只读 + 本地检索，避免冲突）。</li>
+    <li>是否需要 GitHub Action 做自动合并 / 清理机器人。</li>
+  </ul>
+</div>
+</body>
+</html>
