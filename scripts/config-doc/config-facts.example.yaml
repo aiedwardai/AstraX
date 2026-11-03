@@ -1,0 +1,98 @@
+# ==========================================================================
+# 配置事实源 — 脱敏示例（config-facts.example.yaml）
+# --------------------------------------------------------------------------
+# 这是 config-facts.yaml 的【示例/模板】，不含任何真实机器信息，可安全入库。
+# 真实部署请复制本文件为同目录 config-facts.yaml，并填回真实值：
+#   - <HOME>            → 你的家目录（如 /Users/yourname）
+#   - <ORBSTACK_BRIDGE_IP> → OrbStack bridge100 实测私有 IP
+#   - 各绝对路径按本机调整
+# 生成器 / 审计脚本会自动优先读取 config-facts.yaml，缺失时回退到本示例。
+# ==========================================================================
+
+meta:
+  manual_title: 本地部署配置手册 — MTPLX AI 实验室
+  snapshot_date: 2026-11-03
+  generated_note: 本手册由 config-facts.yaml + gen-config-manual.py 自动生成，请勿手改。
+
+hardware:
+  machine: Mac Studio（Apple M5 Max，18 核，64 GB 统一内存）
+  runtime: mtplx 2.12.2（基于 mlx-lm 0.31.3 / mlx 0.32.2）
+  python_bin: <HOME>/.workbuddy/binaries/python/versions/3.13.12/bin/python3
+  container_runtime: OrbStack（orbctl / 兼容 docker CLI）
+  disk_free: "~768 GB"
+
+models:
+  - role: 生成（当前主力）
+    id: mlx-community/Qwen3.6-35B-A3B-4bit
+    precision: MLX 4bit
+    size_gb: 19
+    detail: 35B 总参 / 3B 激活 MoE
+    status: online
+  - role: 生成（回滚保留）
+    id: Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality
+    precision: MLX
+    size_gb: 28
+    detail: 权重仍缓存，未删；64GB 机型与 35B-A3B 不可同时常驻
+    status: cached
+  - role: 嵌入（同进程）
+    id: mlx-community/Qwen3-Embedding-4B-4bit-DWQ
+    precision: MLX 4bit DWQ
+    size_gb: 2.1
+    detail: 维度 2560
+    status: online
+
+network:
+  gen_bind: 127.0.0.1:8000
+  relay_bind_ip: <ORBSTACK_BRIDGE_IP>
+  relay_bind_port: 8000
+  orbstack_bridge: bridge100
+  openwebui_port: 127.0.0.1:3000
+  host_docker_internal: host.docker.internal
+  virtual_route: 0.250.250.254
+  api_key_path: ~/.mtplx/api-key
+
+launchd:
+  mtplx_label: com.user.mtplx
+  relay_label: com.user.mtplx-relay
+  plist_dir: ~/Library/LaunchAgents
+  logs_dir: ~/.mtplx/logs
+  work_dir: ~/.mtplx
+  keep_alive: true
+  run_at_load: true
+
+clients:
+  obsidian:
+    base_url: http://127.0.0.1:8000/v1
+    key_source: ~/.mtplx/api-key
+    chat_model: qwen3.6-35b-a3b-4bit
+    embed_model: Qwen3-Embedding-4B-4bit-DWQ
+  openwebui:
+    note: 经中继够到 MTPLX
+
+performance:
+  throughput_toks: "~113 tok/s"
+  swap_mb: 642
+  ctx_window: 262144
+
+repo:
+  github: github.com/aiedwardai/AstraX
+  local_archive: 归档/
+  local_path: <HOME>/WorkBuddy/服务器部署相关/mtplx-apple-silicon-local-ai-lab
+
+key_files:
+  - path: <HOME>/WorkBuddy/服务器部署相关/mtplx-serve.sh
+    use: 单实例守护启动脚本（方案 C：全 MLX 原生栈）
+  - path: <HOME>/WorkBuddy/服务器部署相关/verify-mtplx.sh
+    use: 双模型全链路一键验收
+  - path: <HOME>/WorkBuddy/服务器部署相关/mtplx-relay.py
+    use: 纯标准库 TCP 中继（容器够到仅回环 MTPLX）
+  - path: <HOME>/WorkBuddy/服务器部署相关/enable-mtplx-persistence.sh
+    use: launchd 常驻一键脚本（bootstrap + 失败回退）
+  - path: ~/Library/LaunchAgents/com.user.mtplx.plist
+    use: launchd 定义（MTPLX）
+  - path: ~/Library/LaunchAgents/com.user.mtplx-relay.plist
+    use: launchd 定义（中继，含 MTPLX_RELAY_BIND_IP）
+  - path: ~/.mtplx/models/
+    use: 模型权重缓存（35B-A3B + 27B 两份 + 嵌入 4B）
+  - path: ~/.mtplx/api-key
+    use: MTPLX 鉴权密钥（权限 600）
