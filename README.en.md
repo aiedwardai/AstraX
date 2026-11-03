@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/astrax-logo.png" alt="AstraX — Think Beyond. Build With AI." width="860">
+</p>
+
 # MTPLX — Apple Silicon Local AI Lab Stack
 
 A **privacy-first local AI lab** reference deployment for Apple Silicon (macOS / arm64): a self-built `mtplx` inference server hosts both **Qwen3.8-27B** (generation) and **Qwen3-Embedding-4B** (embedding) in a **single OpenAI-compatible instance**, and a **loopback TCP relay** lets Open WebUI (in an OrbStack container), local Obsidian (second-brain RAG), and the PDF ingestion pipeline share the same backend.

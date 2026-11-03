@@ -68,10 +68,10 @@ flowchart TB
 
 ## 四、数据存放与目录分层
 
-统一隔离根目录 `~/AI-Lab/`：
+统一隔离根目录 `~/AstraX/`：
 
 ```text
-~/AI-Lab/
+~/AstraX/
 ├── 01_models/      # 权重大文件（只读、不可入 Git）
 ├── 02_data/        # 原始 PDF / 处理后 Markdown（文本可入 vault）
 ├── 03_knowledge/   # Obsidian vault（Git 追踪文本变更）

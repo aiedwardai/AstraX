@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="assets/astrax-logo.png" alt="AstraX — Think Beyond. Build With AI." width="860">
+</p>
+
 # MTPLX — Apple Silicon 本地 AI 实验室栈
 
-[![CI](https://github.com/aiedwardai/AI-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/aiedwardai/AI-Lab/actions/workflows/ci.yml)
+[![CI](https://github.com/aiedwardai/AstraX/actions/workflows/ci.yml/badge.svg)](https://github.com/aiedwardai/AstraX/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Apple%20Silicon-000000.svg)](https://www.apple.com)
 

@@ -1,6 +1,6 @@
 # 贡献指南（CONTRIBUTING）
 
-感谢你关注 **AI-Lab**！本仓库是面向 Apple Silicon 的隐私优先本地 AI 实验室参考配置，仅包含示例、脚本与小工具。
+感谢你关注 **AstraX**！本仓库是面向 Apple Silicon 的隐私优先本地 AI 实验室参考配置，仅包含示例、脚本与小工具。
 
 ## 基本原则
 
